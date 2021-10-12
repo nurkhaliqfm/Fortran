@@ -1,15 +1,38 @@
 program Montecarlo_Metropolis    
     implicit none
-    integer::L_size = 8, J=1
+    integer,parameter::L_size = 8, J=1, mcs = 10000, k =1
+    integer::iter
+    real::f_temp, l_temp, energy_tot, Beta
+    real,parameter::T = 5, minT = 0.5, delT = 0.1
     real, dimension(8,8)::n
+    real, allocatable, dimension(:)::all_energy
 
+    !Initialize lattice configuration
     call initialize(L_size, n)
-    call claster(n, L_size, J)    
+
+    !Temperature Loop
+    f_temp = T
+    l_temp = minT
+    do
+        if(f_temp.gt.l_temp) then
+            !Metropolis-Algorithm
+            print *, "Temperature =", f_temp
+            Beta = k*f_temp
+            do iter = 1, mcs
+                call energy_position(n, L_size, J, energy_tot, Beta)    
+            end do
+        else
+            exit
+        end if
+
+        f_temp = f_temp - delT
+        all_energy = [all_energy, energy_tot]
+        print *, "All Energy = ", all_energy
+    end do
 
 end program Montecarlo_Metropolis
 
 subroutine initialize(L, n)        !L = Lattice Size
-    implicit none
     integer::L, row, col
     real, dimension(L,L)::lattice, n 
     real::r   
@@ -32,19 +55,14 @@ subroutine initialize(L, n)        !L = Lattice Size
 
 end subroutine initialize
 
-subroutine claster(gl, L, j)
-    implicit none
+subroutine energy_position(gl, L, j, energy_tot, Beta)
     real, dimension(L,L)::gl
     integer::x,y,top,bottom,right,left, j,L
-    real::Delta_E, E_0, E_1
+    real::Delta_E, E_0, E_1, energy, energy_tot, Beta
 
-    print *, '--------- From Cluster Subroutine------------'
-    ! call rand_generator(L, x, y)
-
+    energy = 0
     do y=1, L
-        print *, "Row ", y
         do x=1, L
-            print *, "Column ", x
             if(x.eq.1) then
                 left = L
             else 
@@ -66,66 +84,56 @@ subroutine claster(gl, L, j)
                 bottom = y+1
             end if
         
-            E_0 = j*gl(x,y)*(gl(left, y) + gl(x, top) + gl(right, y) + gl(x, bottom))
-            E_1 = j*(-gl(x,y))*(gl(left, y) + gl(x, top) + gl(right, y) + gl(x, bottom))
-        
-            Delta_E = E_1 - E_0
+            ! E_0 = -j*gl(x,y)*(gl(left, y) + gl(x, top) + gl(right, y) + gl(x, bottom))
+            ! E_1 = -j*(-gl(x,y))*(gl(left, y) + gl(x, top) + gl(right, y) + gl(x, bottom))
+       
+            Delta_E = -2*gl(x,y)
+            call energy_total(Delta_E, energy)
         
             if (Delta_E.le.0) then
                 call flip_spin(gl, L, x, y)
             else
-                call recheck_energi(Delta_E, gl, L, x, y)
+                call recheck_energi(Delta_E, gl, L, x, y, Beta)
             end if
-
-            print *, " "
         end do
-            print *, " "
-            print *, " "
-            print *, " "
     end do
+    
+    energy_tot = energy/2.0
 
-    ! print *, 'x = ', x, 'y = ', y
-    ! print *, 'Energi Before =', E_0
-    ! print *, 'Energi After =', E_1
-    ! print *, 'Energi Delta =', Delta_E
-    ! print *, 'N1(Left) = ', gl(left,y), ' N2(Top) = ', gl(x, top)
-    ! print *, 'N3(Right) = ', gl(right, y), ' N4(Bottom) = ', gl(x, bottom)
-        
+end subroutine
+
+subroutine energy_total(dE, energy)
+    real:: dE, energy
+    energy = energy + dE
 end subroutine
 
 subroutine flip_spin(gl, L, x, y)
     real, dimension(L,L)::gl
     integer::x,y,L
 
-    print *, "Flip Spin"
-    
     gl(x,y) = - gl(x,y)
-    write(*, 2) gl
-    2       format(8f6.1)
+    ! write(*, 2) gl
+    ! 2       format(8f6.1)
 end subroutine
 
-subroutine recheck_energi(del_E, gl, L, x, y)
+subroutine recheck_energi(del_E, gl, L, x, y, Beta)
     real, dimension(L,L)::gl
-    real::r, p
-    integer::x,y,L,T = 5, k = 1
+    real::r, p, del_E, Beta  !Beta = k*T
+    integer::x,y,L
 
-    print *, "Recheck Energi"
 
     call random_seed
     call random_number(r)
 
-    p = exp(-del_E/(k*T))
+    p = exp(-del_E/(Beta))
 
     if(p.gt.r) then
         call flip_spin(gl, L, x, y)
-    else
-        print *, "Flip-Spin Canceled"
     end if    
 
 end subroutine
 
 subroutine rand_generator(L, x, y)
-    implicit none
     integer:: L, x, y
     real rand0, rand1
 
